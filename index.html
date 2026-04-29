@@ -151,7 +151,7 @@ body {
 /* ===== STICKY KPI STRIP ===== */
 .kpi-strip {
   position: sticky;
-  top: 66px;
+  top: var(--topbar-h, 66px);
   z-index: 40;
   background: white;
   border-bottom: 1px solid var(--line);
@@ -795,6 +795,12 @@ body {
   .vt-short { display: inline; }
   .vt-btn { padding: 5px 10px; font-size: 11px; }
 
+  /* Refresh group — hide timestamp on mobile to save horizontal space */
+  .refresh-group { padding: 4px 4px 4px 8px; gap: 6px; }
+  .last-updated { display: none; }
+  .refresh-btn { padding: 6px 10px; font-size: 11px; }
+  .refresh-btn span:last-child { display: none; }  /* hide "Refresh" text, keep just the icon */
+
   /* KPI strip: 2x2 grid, NOT sticky on mobile (scrolls with content) */
   .kpi-strip {
     position: static;
@@ -939,6 +945,101 @@ body {
 .kanban::-webkit-scrollbar-thumb,
 #entityHeatmap::-webkit-scrollbar-thumb { background: var(--foundational); border-radius: 3px; }
 
+/* ===== DATA SOURCE BADGES (added for Supabase wiring) ===== */
+.data-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 10px;
+  font-size: 9px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  margin-left: 8px; vertical-align: middle; line-height: 1.4;
+}
+.data-badge .dot {
+  width: 5px; height: 5px; border-radius: 50%;
+}
+.data-badge.live { background: var(--green-soft); color: var(--green); }
+.data-badge.live .dot { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+.data-badge.demo { background: var(--amber-soft); color: var(--amber); }
+.data-badge.demo .dot { background: var(--amber); }
+.data-badge.partial { background: #fff3e0; color: #b86e1f; }
+.data-badge.partial .dot { background: #b86e1f; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Disclaimer note inline with section sub */
+.data-note {
+  font-size: 11px; color: var(--muted); font-style: italic;
+  margin-top: 4px; display: block;
+}
+
+/* ===== REFRESH CONTROL ===== */
+.refresh-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+}
+.last-updated {
+  font-size: 11px;
+  color: rgba(255,255,255,0.65);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.refresh-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: var(--apex);
+  color: white; border: none;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.refresh-btn:hover { background: #0058b8; }
+.refresh-btn:active { transform: scale(0.97); }
+.refresh-btn:disabled { opacity: 0.6; cursor: wait; }
+.refresh-btn .spin { display: inline-block; font-size: 14px; line-height: 1; }
+.refresh-btn.loading .spin { animation: spin 0.9s linear infinite; }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ===== LOADING SKELETON ===== */
+.skeleton {
+  background: linear-gradient(90deg, var(--foundational) 0%, #eef2f7 50%, var(--foundational) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px; color: transparent;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== ERROR / EMPTY STATES ===== */
+.connection-banner {
+  background: #fdecea; color: #b03a2e; border: 1px solid #f5b7b1;
+  padding: 12px 16px; border-radius: 8px; margin: 12px 24px 0;
+  font-size: 13px; display: none;
+}
+.connection-banner.show { display: block; }
+.connection-banner.success { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+.connection-banner.warning { background: #fff8e1; color: #8a6d1f; border-color: #ffd54f; }
+
+.empty-section {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 20px; color: var(--muted); text-align: center;
+}
+.empty-section .empty-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+.empty-section .empty-text { font-size: 13px; font-weight: 500; }
+.empty-section .empty-hint { font-size: 11px; margin-top: 4px; opacity: 0.7; }
+
 </style>
 </head>
 <body>
@@ -954,29 +1055,27 @@ body {
   </div>
   <div class="topbar-controls">
     <div class="tb-control">
-      <div class="tb-label">Entity</div>
-      <select id="entityFilter" class="tb-select">
-        <option value="ALL">All Entities (Group View)</option>
-      </select>
-    </div>
-    <div class="tb-control">
-      <div class="tb-label">Period</div>
-      <select id="periodFilter" class="tb-select">
-        <option value="30">Last 30 days</option>
-        <option value="90" selected>Last 90 days</option>
-        <option value="180">Last 6 months</option>
-        <option value="ytd">Year to date</option>
-      </select>
-    </div>
-    <div class="tb-control">
       <div class="tb-label">View</div>
       <div class="view-toggle" id="viewToggle">
         <button class="vt-btn active" data-view="executive"><span class="vt-full">Executive</span><span class="vt-short">Exec</span></button>
         <button class="vt-btn" data-view="operational"><span class="vt-full">Operational</span><span class="vt-short">Ops</span></button>
       </div>
     </div>
+    <div class="tb-control">
+      <div class="tb-label">Data</div>
+      <div class="refresh-group">
+        <span class="last-updated" id="lastUpdated">Loading…</span>
+        <button class="refresh-btn" id="refreshBtn" type="button" title="Reload live data from Supabase">
+          <span class="spin">↻</span>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- ===== CONNECTION STATUS BANNER ===== -->
+<div class="connection-banner" id="connBanner"></div>
 
 <!-- ===== STICKY KPI STRIP ===== -->
 <div class="kpi-strip">
@@ -1050,9 +1149,9 @@ body {
     <section class="section" id="overview">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 00</div>
+          <div class="section-eyebrow">Section 00 <span class="data-badge live"><span class="dot"></span>Live</span></div>
           <div class="section-title">Recruitment Overview</div>
-          <div class="section-sub" id="overviewSub">Group-wide snapshot · Last 90 days</div>
+          <div class="section-sub" id="overviewSub">Group-wide snapshot</div>
         </div>
         <div class="section-status" id="overviewStatus"><span class="status-dot"></span><span>On Track</span></div>
       </div>
@@ -1100,7 +1199,7 @@ body {
     <section class="section" id="workforce-planning">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 01 · Demand</div>
+          <div class="section-eyebrow">Section 01 · Demand <span class="data-badge live"><span class="dot"></span>Live</span></div>
           <div class="section-title">Workforce Planning</div>
           <div class="section-sub">Approved headcount · vacancy aging · priority queue</div>
         </div>
@@ -1148,9 +1247,11 @@ body {
     <section class="section" id="sourcing">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 02 · Top of Funnel</div>
+          <div class="section-eyebrow">Section 02 · Top of Funnel <span class="data-badge demo"><span class="dot"></span>Demo data</span></div>
           <div class="section-title">Sourcing &amp; Channels</div>
-          <div class="section-sub">Source mix · channel ROI · cost-per-hire by channel</div>
+          <div class="section-sub">Source mix · channel ROI · cost-per-hire by channel
+            <span class="data-note">⚠ Live view (v_source_performance) has data quality issue (impossible 100% hire rate). Showing demo data until view is fixed.</span>
+          </div>
         </div>
         <div class="section-status" id="srcStatus"><span class="status-dot"></span><span>—</span></div>
       </div>
@@ -1189,7 +1290,7 @@ body {
     <section class="section" id="funnel">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 03 · Mid Funnel</div>
+          <div class="section-eyebrow">Section 03 · Mid Funnel <span class="data-badge live"><span class="dot"></span>Live</span></div>
           <div class="section-title">Selection Funnel</div>
           <div class="section-sub">Stage conversion · time-in-stage · drop-off analysis</div>
         </div>
@@ -1222,9 +1323,11 @@ body {
     <section class="section" id="offer">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 04 · Conversion</div>
+          <div class="section-eyebrow">Section 04 · Conversion <span class="data-badge demo"><span class="dot"></span>Demo data</span></div>
           <div class="section-title">Offer &amp; Acceptance</div>
-          <div class="section-sub">Acceptance rate · decline reasons · negotiation patterns</div>
+          <div class="section-sub">Acceptance rate · decline reasons · negotiation patterns
+            <span class="data-note">⚠ Migration only captured accepted offers (583/583 = 100%). Showing demo data until declined/pending offers are tracked.</span>
+          </div>
         </div>
         <div class="section-status" id="offerStatus"><span class="status-dot"></span><span>—</span></div>
       </div>
@@ -1260,9 +1363,11 @@ body {
     <section class="section" id="onboarding">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 05 · Joining</div>
+          <div class="section-eyebrow">Section 05 · Joining <span class="data-badge demo"><span class="dot"></span>Demo data</span></div>
           <div class="section-title">Onboarding</div>
-          <div class="section-sub">No-shows · 30/60/90 day status · early exit reasons</div>
+          <div class="section-sub">No-shows · 30/60/90 day status · early exit reasons
+            <span class="data-note">⚠ No onboarding tracking view yet. Showing demo data.</span>
+          </div>
         </div>
         <div class="section-status" id="onbStatus"><span class="status-dot"></span><span>—</span></div>
       </div>
@@ -1300,9 +1405,11 @@ body {
     <section class="section" id="quality">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 06 · Outcomes</div>
+          <div class="section-eyebrow">Section 06 · Outcomes <span class="data-badge demo"><span class="dot"></span>Demo data</span></div>
           <div class="section-title">Quality &amp; Retention</div>
-          <div class="section-sub">Probation pass · HM satisfaction · quality by source</div>
+          <div class="section-sub">Probation pass · HM satisfaction · quality by source
+            <span class="data-note">⚠ No quality/probation tracking view yet. Showing demo data.</span>
+          </div>
         </div>
         <div class="section-status" id="qStatus"><span class="status-dot"></span><span>—</span></div>
       </div>
@@ -1324,7 +1431,7 @@ body {
     <section class="section" id="recruiter">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 07 · Team</div>
+          <div class="section-eyebrow">Section 07 · Team <span class="data-badge live"><span class="dot"></span>Live</span></div>
           <div class="section-title">Recruiter Performance</div>
           <div class="section-sub">Productivity · workload balance · fill rate</div>
         </div>
@@ -1353,9 +1460,11 @@ body {
     <section class="section" id="cost">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 08 · Spend</div>
+          <div class="section-eyebrow">Section 08 · Spend <span class="data-badge demo"><span class="dot"></span>Demo data</span></div>
           <div class="section-title">Cost &amp; Efficiency</div>
-          <div class="section-sub">Total spend · CPH by entity · agency vs internal</div>
+          <div class="section-sub">Total spend · CPH by entity · agency vs internal
+            <span class="data-note">⚠ Cost-per-hire is null in v_kpi_summary. Showing demo data until source/cost tracking is populated.</span>
+          </div>
         </div>
         <div class="section-status" id="costStatus"><span class="status-dot"></span><span>—</span></div>
       </div>
@@ -1382,9 +1491,11 @@ body {
     <section class="section" id="diversity">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 09 · Demographics</div>
+          <div class="section-eyebrow">Section 09 · Demographics <span class="data-badge partial"><span class="dot"></span>Partial · Gender live</span></div>
           <div class="section-title">Diversity &amp; Demographics</div>
-          <div class="section-sub">Gender · age · education · experience</div>
+          <div class="section-sub">Gender · age · education · experience
+            <span class="data-note">Gender is live from v_demographics. Age, education, and experience charts are demo data.</span>
+          </div>
         </div>
         <div class="section-status status-green"><span class="status-dot"></span><span>Tracking</span></div>
       </div>
@@ -1439,9 +1550,112 @@ body {
 <script>
 /* =========================================================
    ISI GROUP RECRUITMENT DASHBOARD
-   Step A — Self-contained HTML with embedded sample data
-   Backend integration (Google Sheets + Apps Script GET API)
-   replaces SAMPLE_DATA arrays in Step B.
+   Wired to Supabase (Phase B — partial wiring)
+   - 6 sections live: KPI Strip, Overview, Workforce Planning,
+     Selection Funnel, Recruiter Performance, Diversity (gender)
+   - 5 sections on demo data (badged): Sourcing, Offer,
+     Onboarding, Quality, Cost
+   ========================================================= */
+
+/* ===== SUPABASE CONFIG ===== */
+const SUPABASE_URL = 'https://uwaamlyvvzuhoznlrbhz.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ioqn20WRljfy8s0-3p6ZcQ_DTic4F5V';
+
+/* Holder for Supabase data, populated by loadFromSupabase() */
+const LIVE_DATA = {
+  kpiSummary: null,
+  agingBuckets: null,
+  monthlyTrends: null,
+  funnel: null,
+  recruiterPerformance: null,
+  demographics: null,
+  workforceDistribution: null,
+  requisitionSummary: null
+};
+
+/* ===== SUPABASE FETCHER ===== */
+async function fetchView(viewName, queryParams = '') {
+  const url = `${SUPABASE_URL}/rest/v1/${viewName}${queryParams ? '?' + queryParams : ''}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        /* New sb_publishable_* keys: ONLY use the apikey header.
+           Do NOT send Authorization: Bearer with these keys — they are not JWTs.
+           See: https://supabase.com/docs/guides/api/api-keys */
+        'apikey': SUPABASE_ANON_KEY,
+        'Accept': 'application/json'
+      }
+    });
+  } catch (networkErr) {
+    /* This branch fires for "Failed to fetch" — CORS, DNS, file:// origin, offline */
+    throw new Error(`${viewName} → network error (${networkErr.message}). Check: (1) you opened the file via http(s) not file://, (2) browser DevTools console for CORS preflight detail.`);
+  }
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`${viewName} → HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+async function loadFromSupabase() {
+  const banner = document.getElementById('connBanner');
+  banner.className = 'connection-banner show';
+  banner.textContent = '⏳ Loading live data from Supabase…';
+
+  try {
+    /* Parallel fetch of all 8 views */
+    const [
+      kpiSummary, agingBuckets, monthlyTrends, funnel,
+      recruiterPerformance, demographics, workforceDistribution, requisitionSummary
+    ] = await Promise.all([
+      fetchView('v_kpi_summary'),
+      fetchView('v_aging_buckets'),
+      fetchView('v_monthly_trends', 'order=month.asc'),
+      fetchView('v_funnel', 'order=position.asc'),
+      fetchView('v_recruiter_performance', 'order=fill_rate_pct.desc.nullslast'),
+      fetchView('v_demographics'),
+      fetchView('v_workforce_distribution'),
+      fetchView('v_requisition_summary', 'status=eq.open&order=created_at.asc&limit=20')
+    ]);
+
+    /* Store - aggregate views return arrays, take first row for single-row ones */
+    LIVE_DATA.kpiSummary = Array.isArray(kpiSummary) ? kpiSummary[0] : kpiSummary;
+    LIVE_DATA.agingBuckets = Array.isArray(agingBuckets) ? agingBuckets[0] : agingBuckets;
+    LIVE_DATA.monthlyTrends = monthlyTrends;
+    LIVE_DATA.funnel = funnel;
+    LIVE_DATA.recruiterPerformance = recruiterPerformance;
+    LIVE_DATA.demographics = demographics;
+    LIVE_DATA.workforceDistribution = workforceDistribution;
+    LIVE_DATA.requisitionSummary = requisitionSummary;
+
+    banner.className = 'connection-banner success show';
+    banner.innerHTML = `✓ Live data loaded · ${LIVE_DATA.kpiSummary?.total_reqs || 0} requisitions · ${LIVE_DATA.kpiSummary?.total_candidates || 0} candidates · ${LIVE_DATA.kpiSummary?.total_hires || 0} hires`;
+    setTimeout(() => banner.classList.remove('show'), 4000);
+
+    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return true;
+  } catch (err) {
+    console.error('Supabase load failed:', err);
+    banner.className = 'connection-banner show';
+    banner.innerHTML = `⚠ Failed to load live data: ${err.message}<br><span style="font-size:11px;opacity:0.8;">Live sections will show "—". Check console for details. Common cause: RLS policy not allowing anon SELECT.</span>`;
+    return false;
+  }
+}
+
+/* Helper: safely format numbers, fallback to '—' for null/undefined */
+function liveNum(v, decimals = 0) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return decimals > 0 ? Number(v).toFixed(decimals) : Math.round(Number(v)).toLocaleString();
+}
+function livePct(v, decimals = 1) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return Number(v).toFixed(decimals);
+}
+
+/* =========================================================
+   ORIGINAL MOCK-DATA LAYER (used by the 5 demo-badged sections)
    ========================================================= */
 
 /* ===== SEEDED RANDOM (deterministic data across reloads) ===== */
@@ -1849,28 +2063,36 @@ function calcQOH(hires) {
 }
 
 function renderKPIStrip() {
-  const hires = filteredHires();
-  const tth = calcTTH(hires);
-  const cph = calcCPH(hires);
-  const qoh = calcQOH(hires);
-  const openReqs = filteredReqs().filter(r => r.req_status === 'Open');
-  const critical = openReqs.filter(r => r.priority === 'Critical');
+  const k = LIVE_DATA.kpiSummary;
+  if (!k) {
+    ['kpiTTH','kpiCPH','kpiQOH','kpiOpen'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('kpiOpenSub').textContent = '—';
+    return;
+  }
 
-  document.getElementById('kpiTTH').textContent = tth ? Math.round(tth) : '—';
-  document.getElementById('kpiCPH').textContent = cph ? '$' + fmt(Math.round(cph)) : '—';
-  document.getElementById('kpiQOH').textContent = qoh ? qoh.toFixed(2) : '—';
-  document.getElementById('kpiOpen').textContent = openReqs.length;
-  document.getElementById('kpiOpenSub').textContent = critical.length + ' critical';
+  /* Time to Hire — live with delta vs prior period (currently prior=0, so delta hidden) */
+  document.getElementById('kpiTTH').textContent = liveNum(k.avg_tth_days, 1);
+  const tthDeltaEl = document.getElementById('kpiTTHDelta');
+  if (k.prior_tth_days && Number(k.prior_tth_days) > 0) {
+    const d = Number(k.avg_tth_days) - Number(k.prior_tth_days);
+    tthDeltaEl.outerHTML = '<span id="kpiTTHDelta">' + deltaTag(d, 'down') + '</span>';
+  } else {
+    tthDeltaEl.outerHTML = '<span id="kpiTTHDelta" class="text-xs text-muted" style="margin-left:6px;">based on ' + (k.tth_sample_size || 0) + ' hires</span>';
+  }
 
-  /* Prior period for deltas */
-  const priorHires = HIRES.filter(h => entityMatch(h.entity) && (h.start_date_actual ? inPriorPeriod(h.start_date_actual) : false));
-  const priorTTH = calcTTH(priorHires);
-  const priorCPH = calcCPH(priorHires);
-  const priorQOH = calcQOH(priorHires);
+  /* Cost per Hire — null in source, show "—" with note */
+  document.getElementById('kpiCPH').textContent = k.avg_cph_usd ? '$' + liveNum(k.avg_cph_usd) : '—';
+  const cphDeltaEl = document.getElementById('kpiCPHDelta');
+  cphDeltaEl.outerHTML = '<span id="kpiCPHDelta" class="text-xs text-muted" style="margin-left:6px;">' + (k.avg_cph_usd ? '' : 'not yet tracked') + '</span>';
 
-  document.getElementById('kpiTTHDelta').outerHTML = '<span id="kpiTTHDelta">' + (priorTTH ? deltaTag(delta(tth, priorTTH), 'down') : '') + '</span>';
-  document.getElementById('kpiCPHDelta').outerHTML = '<span id="kpiCPHDelta">' + (priorCPH ? deltaTag(delta(cph, priorCPH), 'down') : '') + '</span>';
-  document.getElementById('kpiQOHDelta').outerHTML = '<span id="kpiQOHDelta">' + (priorQOH ? deltaTag(delta(qoh, priorQOH), 'up') : '') + '</span>';
+  /* Quality of Hire — no source view, show "—" */
+  document.getElementById('kpiQOH').textContent = '—';
+  const qohDeltaEl = document.getElementById('kpiQOHDelta');
+  qohDeltaEl.outerHTML = '<span id="kpiQOHDelta" class="text-xs text-muted" style="margin-left:6px;">not yet tracked</span>';
+
+  /* Open Requisitions */
+  document.getElementById('kpiOpen').textContent = liveNum(k.open_reqs);
+  document.getElementById('kpiOpenSub').textContent = (k.critical_reqs || 0) + ' critical';
 }
 
 /* ===== CHART DEFAULTS ===== */
@@ -1895,122 +2117,98 @@ function destroyChart(id) {
 
 /* ===== OVERVIEW ===== */
 function renderOverview() {
-  const hires = filteredHires();
-  const open = filteredReqs().filter(r => r.req_status === 'Open');
-  const aged60 = open.filter(r => daysBetween(new Date(r.req_opened_date), TODAY) > 60).length;
-  const offers = filteredOffers();
-  const accepted = offers.filter(o => o.offer_status === 'Accepted').length;
-  const acceptRate = offers.length ? Math.round((accepted / offers.length) * 100) : 0;
-  const day90Eligible = hires.filter(h => h.day_90_status !== 'Pending' && !h.no_show);
-  const day90Active = day90Eligible.filter(h => h.day_90_status === 'Active').length;
-  const ret90 = day90Eligible.length ? Math.round((day90Active / day90Eligible.length) * 100) : 0;
+  const k = LIVE_DATA.kpiSummary || {};
+  const ag = LIVE_DATA.agingBuckets || {};
+  const trends = LIVE_DATA.monthlyTrends || [];
+  const funnel = LIVE_DATA.funnel || [];
 
-  document.getElementById('ovHires').textContent = hires.length;
-  document.getElementById('ovOpen').textContent = open.length;
-  document.getElementById('ovAging').textContent = aged60 + ' aged 60+ days';
-  document.getElementById('ovAccept').textContent = acceptRate;
-  document.getElementById('ovRet90').textContent = ret90;
+  /* KPI cards */
+  document.getElementById('ovHires').textContent = liveNum(k.total_hires);
+  document.getElementById('ovOpen').textContent = liveNum(k.open_reqs);
+  document.getElementById('ovAging').textContent = liveNum(ag.aged_60_plus_total) + ' aged 60+ days';
+  document.getElementById('ovAccept').textContent = livePct(k.offer_acceptance_pct, 0);
+  document.getElementById('ovRet90').textContent = '—';
 
-  /* Status badge */
+  /* Status badge — based on aging severity since accept rate is a known artifact */
   const statusEl = document.getElementById('overviewStatus');
   let st = 'green', label = 'On Track';
-  if (acceptRate < 70 || ret90 < 75 || aged60 > open.length * 0.3) { st = 'amber'; label = 'Watch'; }
-  if (acceptRate < 60 || ret90 < 65) { st = 'red'; label = 'Action Needed'; }
+  const agedPct = k.open_reqs ? (ag.aged_60_plus_total / k.open_reqs) * 100 : 0;
+  if (agedPct > 30) { st = 'amber'; label = 'Watch'; }
+  if (agedPct > 60) { st = 'red'; label = 'Action Needed'; }
   statusEl.className = 'section-status status-' + st;
   statusEl.innerHTML = '<span class="status-dot"></span><span>' + label + '</span>';
 
-  document.getElementById('overviewSub').textContent =
-    (STATE.entity === 'ALL' ? 'Group-wide snapshot' : STATE.entity + ' snapshot') +
-    ' · Last ' + (STATE.period === 'ytd' ? 'YTD' : STATE.period + ' days');
+  document.getElementById('overviewSub').textContent = 'Group-wide snapshot · current state';
 
-  /* Trend chart */
+  /* Trend chart — last 6 months from v_monthly_trends */
   destroyChart('trend');
-  const months = [];
-  for (let m = 5; m >= 0; m--) {
-    const d = new Date(TODAY.getFullYear(), TODAY.getMonth() - m, 1);
-    months.push({ key: d.toISOString().slice(0, 7), label: d.toLocaleString('en', { month: 'short' }) });
-  }
-  const trendData = months.map(m => HIRES.filter(h => h.start_date_actual && h.start_date_actual.startsWith(m.key) && entityMatch(h.entity)).length);
+  const recent = trends.slice(-6);
   CHARTS.trend = new Chart(document.getElementById('trendChart'), {
     type: 'line',
     data: {
-      labels: months.map(m => m.label),
+      labels: recent.map(m => m.month_label),
       datasets: [{
-        label: 'Hires', data: trendData,
+        label: 'Hires', data: recent.map(m => m.hires_made || 0),
         borderColor: COL.apex, backgroundColor: 'rgba(0,74,152,0.10)',
         fill: true, tension: 0.35, borderWidth: 2.5,
         pointBackgroundColor: COL.apex, pointRadius: 4, pointHoverRadius: 6
+      }, {
+        label: 'Reqs Opened', data: recent.map(m => m.reqs_opened || 0),
+        borderColor: COL.blaze, backgroundColor: 'transparent',
+        borderDash: [4,4], fill: false, tension: 0.35, borderWidth: 2,
+        pointBackgroundColor: COL.blaze, pointRadius: 3
       }]
     },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: true, position: 'bottom' } },
       scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } }
     }
   });
 
-  /* Pipeline mini */
+  /* Pipeline mini — from v_funnel (active counts only, exclude terminal stages) */
   const pipelineEl = document.getElementById('pipelineMini');
-  const inProgress = CANDIDATES.filter(c => c.final_outcome === 'In Progress' && entityMatch(reqEntityForCandidate(c)));
-  let html = '';
-  STAGES.slice(0, 6).forEach(s => {
-    const count = inProgress.filter(c => c.current_stage === s).length;
-    html += `<div class="flex-between" style="margin-bottom:8px;">
-      <div style="font-size:12px;font-weight:500;">${s}</div>
-      <div style="display:flex;align-items:center;gap:8px;flex:1;margin:0 12px;">
-        <div class="progress-bar" style="flex:1;"><div class="progress-fill blaze" style="width:${Math.min(100, count * 4)}%"></div></div>
-      </div>
-      <div class="mono" style="font-weight:600;font-size:13px;width:30px;text-align:right;">${count}</div>
-    </div>`;
-  });
-  pipelineEl.innerHTML = html;
-
-  /* Entity heatmap */
-  const heatEl = document.getElementById('entityHeatmap');
-  const metrics = ['Open Reqs', 'Fill Rate', 'Acceptance', 'Day-90 Active', 'Quality'];
-  let heatHtml = '<div class="heatmap" style="--cols:' + metrics.length + ';"><div class="heatmap-row"><div class="heatmap-header">Entity</div>';
-  metrics.forEach(m => heatHtml += `<div class="heatmap-header">${m}</div>`);
-  heatHtml += '</div>';
-  ENTITIES.forEach(ent => {
-    const eReqs = REQUISITIONS.filter(r => r.entity === ent);
-    const eHires = HIRES.filter(h => h.entity === ent && h.start_date_actual && inPeriod(h.start_date_actual));
-    const eOffers = OFFERS.filter(o => {
-      const c = CANDIDATES.find(x => x.candidate_id === o.candidate_id);
-      return c && reqEntityForCandidate(c) === ent && inPeriod(o.offer_date);
+  const activeStages = funnel.filter(f => (f.active_count || 0) > 0);
+  const maxActive = Math.max(...activeStages.map(f => f.active_count || 0), 1);
+  if (activeStages.length === 0) {
+    pipelineEl.innerHTML = '<div class="empty-section"><div class="empty-icon">○</div><div class="empty-text">No active candidates in pipeline</div></div>';
+  } else {
+    let html = '';
+    activeStages.forEach(s => {
+      const pct = ((s.active_count / maxActive) * 100);
+      html += `<div class="flex-between" style="margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:500;">${s.stage_name}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;margin:0 12px;">
+          <div class="progress-bar" style="flex:1;"><div class="progress-fill blaze" style="width:${pct}%"></div></div>
+        </div>
+        <div class="mono" style="font-weight:600;font-size:13px;width:30px;text-align:right;">${s.active_count}</div>
+      </div>`;
     });
-    const eOpen = eReqs.filter(r => r.req_status === 'Open').length;
-    const totalApproved = eReqs.reduce((s, r) => s + r.headcount_approved, 0);
-    const totalFilled = eReqs.reduce((s, r) => s + r.headcount_filled, 0);
-    const fillRate = totalApproved ? Math.round((totalFilled / totalApproved) * 100) : 0;
-    const accepted = eOffers.filter(o => o.offer_status === 'Accepted').length;
-    const acc = eOffers.length ? Math.round((accepted / eOffers.length) * 100) : 0;
-    const eDay90Eligible = eHires.filter(h => h.day_90_status !== 'Pending' && !h.no_show);
-    const day90 = eDay90Eligible.length ? Math.round((eDay90Eligible.filter(h => h.day_90_status === 'Active').length / eDay90Eligible.length) * 100) : 0;
-    const eQ = calcQOH(eHires);
+    pipelineEl.innerHTML = html;
+  }
 
-    heatHtml += `<div class="heatmap-row"><div class="heatmap-label">${ent}</div>`;
-    heatHtml += heatCell(eOpen, eOpen <= 5 ? 'g' : eOpen <= 10 ? 'a' : 'r', eOpen);
-    heatHtml += heatCell(fillRate + '%', fillRate >= 80 ? 'g' : fillRate >= 60 ? 'a' : 'r');
-    heatHtml += heatCell(eOffers.length ? acc + '%' : '—', eOffers.length ? (acc >= 80 ? 'g' : acc >= 65 ? 'a' : 'r') : 'n');
-    heatHtml += heatCell(eDay90Eligible.length ? day90 + '%' : '—', eDay90Eligible.length ? (day90 >= 85 ? 'g' : day90 >= 70 ? 'a' : 'r') : 'n');
-    heatHtml += heatCell(eQ ? eQ.toFixed(1) : '—', eQ ? (eQ >= 4 ? 'g' : eQ >= 3.2 ? 'a' : 'r') : 'n');
-    heatHtml += '</div>';
-  });
-  heatHtml += '</div>';
-  heatEl.innerHTML = heatHtml;
+  /* Entity heatmap — REPLACED with aging summary since entity data isn't populated */
+  const heatEl = document.getElementById('entityHeatmap');
+  heatEl.innerHTML = `
+    <div class="empty-section" style="padding: 24px 20px;">
+      <div class="empty-text" style="margin-bottom: 12px;">Entity-level breakdown not available</div>
+      <div class="empty-hint">Entity data (unit_id, department_id) is not populated on requisitions yet. Once your team backfills the org directory, this heatmap will show per-entity performance.</div>
+    </div>`;
 
-  /* Action list */
+  /* Action list — from live aging data */
   const actionEl = document.getElementById('actionList');
   const actions = [];
-  open.filter(r => daysBetween(new Date(r.req_opened_date), TODAY) > 75).slice(0, 3).forEach(r => {
-    actions.push({ icon: '⚐', text: `<strong>${r.position_title}</strong> at ${r.entity} aged ${daysBetween(new Date(r.req_opened_date), TODAY)} days — escalate to recruiter` });
-  });
-  const expiringOffers = OFFERS.filter(o => o.offer_status === 'Extended').slice(0, 2);
-  expiringOffers.forEach(o => {
-    actions.push({ icon: '⏰', text: `Offer <strong>${o.offer_id}</strong> awaiting response — follow up` });
-  });
-  hires.filter(h => h.no_show).slice(0, 2).forEach(h => {
-    actions.push({ icon: '⚠', text: `<strong>No-show</strong>: ${h.position_title} at ${h.entity} — investigate cause` });
-  });
+  if (ag.bucket_90_plus > 0) {
+    actions.push({ icon: '⚐', text: `<strong>${ag.bucket_90_plus} requisitions</strong> have been open for <strong>90+ days</strong> — escalate or close` });
+  }
+  if (ag.bucket_61_90 > 0) {
+    actions.push({ icon: '⚐', text: `<strong>${ag.bucket_61_90} requisitions</strong> in the 61–90 day aging bucket — review priority` });
+  }
+  if (k.critical_reqs > 0) {
+    actions.push({ icon: '⚠', text: `<strong>${k.critical_reqs} critical-priority</strong> reqs still open — assign owner` });
+  }
+  if (ag.oldest_req_days > 200) {
+    actions.push({ icon: '⏰', text: `Oldest open req is <strong>${ag.oldest_req_days} days</strong> old — close or replan` });
+  }
   if (!actions.length) actions.push({ icon: '✓', text: 'No urgent actions — pipeline healthy' });
   actionEl.innerHTML = actions.map(a => `<div class="action-item"><div class="action-icon">${a.icon}</div><div class="action-text">${a.text}</div></div>`).join('');
 }
@@ -2027,104 +2225,147 @@ function heatCell(val, code, raw) {
 
 /* ===== WORKFORCE PLANNING ===== */
 function renderWorkforce() {
-  const reqs = filteredReqs();
-  const open = reqs.filter(r => r.req_status === 'Open');
-  const approved = reqs.reduce((s, r) => s + r.headcount_approved, 0);
-  const filled = reqs.reduce((s, r) => s + r.headcount_filled, 0);
-  const fillRate = approved ? Math.round((filled / approved) * 100) : 0;
-  const ages = open.map(r => daysBetween(new Date(r.req_opened_date), TODAY));
-  const avgAge = ages.length ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
-  const critical = open.filter(r => r.priority === 'Critical').length;
+  const k = LIVE_DATA.kpiSummary || {};
+  const ag = LIVE_DATA.agingBuckets || {};
+  const wd = LIVE_DATA.workforceDistribution || [];
+  const reqSum = LIVE_DATA.requisitionSummary || [];
 
-  document.getElementById('wfpApproved').textContent = approved;
-  document.getElementById('wfpFilled').textContent = filled;
-  document.getElementById('wfpFillProg').style.width = fillRate + '%';
+  /* KPI cards.
+     We don't have an "approved headcount" view, so we show:
+     - Open Reqs (proxy for approved-but-not-yet-filled)
+     - Total Hires (lifetime filled)
+     - Avg Vacancy Age from v_aging_buckets
+     - Critical Open from v_kpi_summary */
+  document.getElementById('wfpApproved').textContent = liveNum(k.open_reqs);
+  document.getElementById('wfpFilled').textContent = liveNum(k.total_hires);
+  const fillRate = k.total_reqs ? Math.round((k.total_hires / k.total_reqs) * 100) : 0;
+  document.getElementById('wfpFillProg').style.width = Math.min(100, fillRate) + '%';
   document.getElementById('wfpFillProg').className = 'progress-fill ' + (fillRate >= 80 ? 'green' : fillRate >= 60 ? 'amber' : 'red');
-  document.getElementById('wfpAge').textContent = avgAge;
-  document.getElementById('wfpCritical').textContent = critical;
+  document.getElementById('wfpAge').textContent = liveNum(ag.avg_age_days);
+  document.getElementById('wfpCritical').textContent = liveNum(k.critical_reqs);
 
+  /* Status badge based on aging severity */
   const stEl = document.getElementById('wfpStatus');
-  const stCode = avgAge < 35 && critical < 3 ? 'green' : avgAge < 60 ? 'amber' : 'red';
+  const avgAge = Number(ag.avg_age_days) || 0;
+  const stCode = avgAge < 60 && (k.critical_reqs || 0) < 10 ? 'green' : avgAge < 100 ? 'amber' : 'red';
   const stLabel = stCode === 'green' ? 'Healthy' : stCode === 'amber' ? 'Watch' : 'Critical';
   stEl.className = 'section-status status-' + stCode;
   stEl.innerHTML = '<span class="status-dot"></span><span>' + stLabel + '</span>';
 
-  /* Aging chart */
+  /* Aging chart — direct from v_aging_buckets */
   destroyChart('aging');
-  const buckets = [
-    { label: '0-30', count: open.filter(r => daysBetween(new Date(r.req_opened_date), TODAY) <= 30).length },
-    { label: '31-60', count: open.filter(r => { const d = daysBetween(new Date(r.req_opened_date), TODAY); return d > 30 && d <= 60; }).length },
-    { label: '61-90', count: open.filter(r => { const d = daysBetween(new Date(r.req_opened_date), TODAY); return d > 60 && d <= 90; }).length },
-    { label: '90+', count: open.filter(r => daysBetween(new Date(r.req_opened_date), TODAY) > 90).length }
-  ];
   CHARTS.aging = new Chart(document.getElementById('agingChart'), {
     type: 'bar',
-    data: { labels: buckets.map(b => b.label + ' days'),
-      datasets: [{ data: buckets.map(b => b.count), backgroundColor: [COL.green, COL.amber, COL.blaze, COL.red], borderRadius: 6 }] },
+    data: {
+      labels: ['0-30 days', '31-60 days', '61-90 days', '90+ days'],
+      datasets: [{
+        data: [ag.bucket_0_30 || 0, ag.bucket_31_60 || 0, ag.bucket_61_90 || 0, ag.bucket_90_plus || 0],
+        backgroundColor: [COL.green, COL.amber, COL.blaze, COL.red],
+        borderRadius: 6
+      }]
+    },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
   });
 
-  /* HC by entity */
+  /* Approved vs Filled by Entity — REPLACED with status breakdown since no entity data */
   destroyChart('hcByEntity');
-  const ents = STATE.entity === 'ALL' ? ENTITIES : [STATE.entity];
-  const approvedByEnt = ents.map(e => REQUISITIONS.filter(r => r.entity === e).reduce((s, r) => s + r.headcount_approved, 0));
-  const filledByEnt = ents.map(e => REQUISITIONS.filter(r => r.entity === e).reduce((s, r) => s + r.headcount_filled, 0));
-  CHARTS.hcByEntity = new Chart(document.getElementById('hcByEntityChart'), {
-    type: 'bar',
-    data: {
-      labels: ents.map(e => e.replace('ISI ', '')),
-      datasets: [
-        { label: 'Approved', data: approvedByEnt, backgroundColor: COL.found, borderRadius: 4 },
-        { label: 'Filled', data: filledByEnt, backgroundColor: COL.apex, borderRadius: 4 }
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', align: 'end' } },
-      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
-  });
+  /* Use workforce_distribution rows where dimension_type = 'status' if available, else employment_type */
+  let dimType = 'status';
+  let statusRows = wd.filter(d => d.dimension_type === dimType);
+  if (statusRows.length === 0) {
+    dimType = 'employment_type';
+    statusRows = wd.filter(d => d.dimension_type === dimType);
+  }
+  const hcCanvas = document.getElementById('hcByEntityChart');
+  const hcTitle = hcCanvas.closest('.card').querySelector('.card-title');
+  hcTitle.textContent = 'Requisitions by ' + (dimType === 'status' ? 'Status' : 'Employment Type');
+  if (statusRows.length > 0) {
+    CHARTS.hcByEntity = new Chart(hcCanvas, {
+      type: 'bar',
+      data: {
+        labels: statusRows.map(d => (d.dimension || '').replace(/_/g, ' ')),
+        datasets: [
+          { label: 'Total Reqs', data: statusRows.map(d => d.total_reqs || 0), backgroundColor: COL.found, borderRadius: 4 },
+          { label: 'Filled', data: statusRows.map(d => d.filled_count || 0), backgroundColor: COL.apex, borderRadius: 4 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', align: 'end' } },
+        scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+    });
+  }
 
-  /* Replace vs new */
+  /* Replacement vs New Hire — from v_workforce_distribution if dimension_type='replacement_type' exists */
   destroyChart('replaceNew');
-  const repl = reqs.filter(r => r.replacement_or_new === 'Replacement').length;
-  const newH = reqs.filter(r => r.replacement_or_new === 'New').length;
-  CHARTS.replaceNew = new Chart(document.getElementById('replaceNewChart'), {
-    type: 'doughnut',
-    data: { labels: ['Replacement', 'New Hire'],
-      datasets: [{ data: [repl, newH], backgroundColor: [COL.apex, COL.blaze], borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false } } }
-  });
-  document.getElementById('replaceNewLegend').innerHTML = `
-    <div class="donut-legend-item"><div class="donut-legend-dot" style="background:${COL.apex}"></div>Replacement<span class="donut-legend-num">${repl}</span></div>
-    <div class="donut-legend-item"><div class="donut-legend-dot" style="background:${COL.blaze}"></div>New Hire<span class="donut-legend-num">${newH}</span></div>`;
+  let replRows = wd.filter(d => d.dimension_type === 'replacement_type' || d.dimension_type === 'is_replacement');
+  let repl = 0, newH = 0;
+  if (replRows.length > 0) {
+    replRows.forEach(r => {
+      const dim = String(r.dimension || '').toLowerCase();
+      if (dim === 'true' || dim === 'replacement' || dim === 'yes') repl += (r.total_reqs || 0);
+      else newH += (r.total_reqs || 0);
+    });
+  }
+  if (repl + newH > 0) {
+    CHARTS.replaceNew = new Chart(document.getElementById('replaceNewChart'), {
+      type: 'doughnut',
+      data: { labels: ['Replacement', 'New Hire'], datasets: [{ data: [repl, newH], backgroundColor: [COL.apex, COL.blaze], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false } } }
+    });
+    document.getElementById('replaceNewLegend').innerHTML = `
+      <div class="donut-legend-item"><div class="donut-legend-dot" style="background:${COL.apex}"></div>Replacement<span class="donut-legend-num">${repl}</span></div>
+      <div class="donut-legend-item"><div class="donut-legend-dot" style="background:${COL.blaze}"></div>New Hire<span class="donut-legend-num">${newH}</span></div>`;
+  } else {
+    document.getElementById('replaceNewLegend').innerHTML = '<div class="empty-section" style="padding:10px;"><div class="empty-text">No replacement/new split available</div></div>';
+  }
 
-  /* Priority */
+  /* Priority chart — from v_workforce_distribution */
   destroyChart('priority');
-  const prios = ['Critical', 'High', 'Normal'];
-  const prioCounts = prios.map(p => open.filter(r => r.priority === p).length);
-  CHARTS.priority = new Chart(document.getElementById('priorityChart'), {
-    type: 'bar',
-    data: { labels: prios, datasets: [{ data: prioCounts, backgroundColor: [COL.red, COL.amber, COL.green], borderRadius: 6 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true, grid: { color: '#f0f3f7' } }, y: { grid: { display: false } } } }
-  });
+  const priorRows = wd.filter(d => d.dimension_type === 'priority');
+  if (priorRows.length > 0) {
+    /* Order: critical, high, normal, low */
+    const order = ['critical', 'high', 'normal', 'low'];
+    priorRows.sort((a, b) => (order.indexOf((a.dimension || '').toLowerCase()) + 99) - (order.indexOf((b.dimension || '').toLowerCase()) + 99));
+    const priColors = priorRows.map(r => {
+      const d = (r.dimension || '').toLowerCase();
+      return d === 'critical' ? COL.red : d === 'high' ? COL.amber : d === 'normal' ? COL.green : COL.muted;
+    });
+    CHARTS.priority = new Chart(document.getElementById('priorityChart'), {
+      type: 'bar',
+      data: { labels: priorRows.map(d => d.dimension), datasets: [{ data: priorRows.map(d => d.total_reqs || 0), backgroundColor: priColors, borderRadius: 6 }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, grid: { color: '#f0f3f7' } }, y: { grid: { display: false } } } }
+    });
+  }
 
-  /* Aging table */
-  const agingRows = open.map(r => ({ ...r, days: daysBetween(new Date(r.req_opened_date), TODAY) }))
-    .sort((a, b) => b.days - a.days).slice(0, 10);
+  /* Aging table — from v_requisition_summary (top 10 oldest open reqs) */
   const tb = document.querySelector('#agingTable tbody');
-  tb.innerHTML = agingRows.map(r => `<tr>
-    <td class="mono">${r.req_id}</td>
-    <td>${r.position_title}</td>
-    <td><span class="entity-pill">${r.entity}</span></td>
-    <td>${r.department}</td>
-    <td>${prioChip(r.priority)}</td>
-    <td class="tbl-num">${r.req_opened_date}</td>
-    <td class="tbl-num"><strong>${r.days}</strong></td>
-  </tr>`).join('');
+  if (reqSum.length === 0) {
+    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">No open requisitions found</td></tr>';
+  } else {
+    /* Compute days_open from created_at */
+    const today = new Date();
+    const enriched = reqSum.map(r => {
+      const created = r.created_at ? new Date(r.created_at) : null;
+      const days = created ? Math.floor((today - created) / 86400000) : null;
+      return { ...r, _days: days, _opened: created ? created.toISOString().slice(0, 10) : '—' };
+    }).sort((a, b) => (b._days || 0) - (a._days || 0)).slice(0, 10);
+    tb.innerHTML = enriched.map(r => `<tr>
+      <td class="mono">${r.req_code || '—'}</td>
+      <td>${r.job_title || '—'}</td>
+      <td><span class="entity-pill">—</span></td>
+      <td>${r.function_name || r.unit_name || '—'}</td>
+      <td>${prioChip(r.priority || 'normal')}</td>
+      <td class="tbl-num">${r._opened}</td>
+      <td class="tbl-num"><strong>${r._days != null ? r._days : '—'}</strong></td>
+    </tr>`).join('');
+  }
 }
 function prioChip(p) {
-  const map = { Critical: 'chip-red', High: 'chip-amber', Normal: 'chip-gray' };
-  return `<span class="chip ${map[p] || 'chip-gray'}">${p}</span>`;
+  const norm = String(p || '').toLowerCase();
+  const map = { critical: 'chip-red', high: 'chip-amber', normal: 'chip-gray', low: 'chip-gray' };
+  const display = norm.charAt(0).toUpperCase() + norm.slice(1);
+  return `<span class="chip ${map[norm] || 'chip-gray'}">${display}</span>`;
 }
 
 /* ===== SOURCING ===== */
@@ -2212,85 +2453,96 @@ function renderSourcing() {
 
 /* ===== FUNNEL ===== */
 function renderFunnel() {
-  const cands = filteredCandidates();
-  /* For each candidate, find max stage reached */
-  const stageReached = STAGES.map(() => 0);
-  cands.forEach(c => {
-    const events = STAGE_EVENTS.filter(e => e.candidate_id === c.candidate_id && e.event_type === 'Entered');
-    const maxStageIdx = Math.max(...events.map(e => STAGES.indexOf(e.stage)), -1);
-    for (let i = 0; i <= maxStageIdx; i++) stageReached[i]++;
-  });
+  const funnel = LIVE_DATA.funnel || [];
+
+  /* Build a combined-count column: active + hired = total volume that ever reached this stage */
+  const stages = funnel.map(f => ({
+    name: f.stage_name || 'Unknown',
+    position: f.position || 0,
+    active: f.active_count || 0,
+    hired: f.hired_count || 0,
+    total: (f.active_count || 0) + (f.hired_count || 0)
+  })).sort((a, b) => a.position - b.position);
 
   const fEl = document.getElementById('funnelView');
-  const max = stageReached[0] || 1;
-  fEl.innerHTML = STAGES.map((s, i) => {
-    const count = stageReached[i];
-    const conv = i === 0 ? null : pct(count, stageReached[i - 1]);
-    const widthPct = (count / max) * 100;
-    return `<div class="funnel-stage">
-      <div class="funnel-stage-label">${s}</div>
-      <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${widthPct}%">${widthPct > 12 ? fmt(count) : ''}</div></div>
-      <div class="funnel-count">${fmt(count)}</div>
-      <div class="funnel-conv ${conv !== null && conv < 50 ? 'weak' : ''}">${conv !== null ? conv + '%' : '—'}</div>
-    </div>`;
-  }).join('');
-
-  const overallConv = stageReached[0] ? pct(stageReached[6], stageReached[0]) : 0;
-  const stEl = document.getElementById('funnelStatus');
-  const stCode = overallConv >= 8 ? 'green' : overallConv >= 4 ? 'amber' : 'red';
-  stEl.className = 'section-status status-' + stCode;
-  stEl.innerHTML = `<span class="status-dot"></span><span>Overall ${overallConv}%</span>`;
-
-  /* Time in stage */
-  destroyChart('timeInStage');
-  const tisData = [];
-  for (let i = 0; i < STAGES.length - 1; i++) {
-    const days = [];
-    cands.forEach(c => {
-      const e1 = STAGE_EVENTS.find(e => e.candidate_id === c.candidate_id && e.stage === STAGES[i]);
-      const e2 = STAGE_EVENTS.find(e => e.candidate_id === c.candidate_id && e.stage === STAGES[i + 1]);
-      if (e1 && e2) days.push(daysBetween(new Date(e1.event_date), new Date(e2.event_date)));
-    });
-    tisData.push(days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10) / 10 : 0);
+  if (stages.length === 0) {
+    fEl.innerHTML = '<div class="empty-section"><div class="empty-icon">○</div><div class="empty-text">No funnel data available</div></div>';
+  } else {
+    const max = Math.max(...stages.map(s => s.total), 1);
+    fEl.innerHTML = stages.map((s, i) => {
+      const conv = i === 0 ? null : pct(s.total, stages[i - 1].total);
+      const widthPct = (s.total / max) * 100;
+      return `<div class="funnel-stage">
+        <div class="funnel-stage-label">${s.name}</div>
+        <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${widthPct}%">${widthPct > 12 ? fmt(s.total) : ''}</div></div>
+        <div class="funnel-count">${fmt(s.total)}</div>
+        <div class="funnel-conv ${conv !== null && conv < 50 ? 'weak' : ''}">${conv !== null ? conv + '%' : '—'}</div>
+      </div>`;
+    }).join('');
   }
-  CHARTS.timeInStage = new Chart(document.getElementById('timeInStageChart'), {
-    type: 'bar',
-    data: { labels: STAGES.slice(0, -1).map(s => s.replace(' Interview', ' Int.')),
-      datasets: [{ label: 'Avg Days', data: tisData, backgroundColor: COL.apex, borderRadius: 4 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true, grid: { color: '#f0f3f7' } }, y: { grid: { display: false } } } }
-  });
 
-  /* Drop-off chart */
-  destroyChart('dropoff');
-  const reasons = {};
-  cands.filter(c => c.outcome_reason).forEach(c => {
-    reasons[c.outcome_reason] = (reasons[c.outcome_reason] || 0) + 1;
-  });
-  const sortedR = Object.entries(reasons).sort((a, b) => b[1] - a[1]);
-  CHARTS.dropoff = new Chart(document.getElementById('dropoffChart'), {
-    type: 'bar',
-    data: { labels: sortedR.map(r => r[0]),
-      datasets: [{ data: sortedR.map(r => r[1]), backgroundColor: PALETTE.slice(0, sortedR.length), borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
-  });
+  /* Status badge — overall funnel conversion (first stage to last hired-stage) */
+  const stEl = document.getElementById('funnelStatus');
+  if (stages.length >= 2) {
+    const first = stages[0].total || 1;
+    const lastHired = stages[stages.length - 1].hired || 0;
+    const overallConv = pct(lastHired, first);
+    const stCode = overallConv >= 8 ? 'green' : overallConv >= 4 ? 'amber' : 'red';
+    stEl.className = 'section-status status-' + stCode;
+    stEl.innerHTML = `<span class="status-dot"></span><span>Overall ${overallConv}%</span>`;
+  } else {
+    stEl.className = 'section-status status-green';
+    stEl.innerHTML = '<span class="status-dot"></span><span>—</span>';
+  }
 
-  /* Kanban (operational) */
-  const kEl = document.getElementById('kanbanBoard');
-  const inProg = CANDIDATES.filter(c => c.final_outcome === 'In Progress' && entityMatch(reqEntityForCandidate(c)));
-  let kHtml = '';
-  STAGES.slice(0, 7).forEach(s => {
-    const inStage = inProg.filter(c => c.current_stage === s).slice(0, 4);
-    kHtml += `<div class="kanban-col">
-      <div class="kanban-head"><span>${s}</span><span class="kanban-count">${inProg.filter(c => c.current_stage === s).length}</span></div>`;
-    inStage.forEach(c => {
-      const req = REQUISITIONS.find(r => r.req_id === c.req_id);
-      kHtml += `<div class="kanban-card"><div class="name">${c.full_name}</div><div class="pos">${req ? req.position_title : ''}</div></div>`;
+  /* Time in Stage chart — REPLACED with active vs hired comparison since no time-in-stage view */
+  destroyChart('timeInStage');
+  const tisCanvas = document.getElementById('timeInStageChart');
+  const tisTitle = tisCanvas.closest('.card').querySelector('.card-title');
+  tisTitle.textContent = 'Active vs Hired by Stage';
+  if (stages.length > 0) {
+    CHARTS.timeInStage = new Chart(tisCanvas, {
+      type: 'bar',
+      data: {
+        labels: stages.map(s => s.name.length > 14 ? s.name.slice(0, 14) + '…' : s.name),
+        datasets: [
+          { label: 'Active', data: stages.map(s => s.active), backgroundColor: COL.blaze, borderRadius: 4 },
+          { label: 'Hired', data: stages.map(s => s.hired), backgroundColor: COL.green, borderRadius: 4 }
+        ]
+      },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', align: 'end' } },
+        scales: { x: { beginAtZero: true, stacked: true, grid: { color: '#f0f3f7' } }, y: { stacked: true, grid: { display: false } } } }
     });
-    kHtml += '</div>';
-  });
-  kEl.innerHTML = kHtml;
+  }
+
+  /* Drop-off chart — placeholder since no decline-reasons view */
+  destroyChart('dropoff');
+  const dropCanvas = document.getElementById('dropoffChart');
+  const dropTitle = dropCanvas.closest('.card').querySelector('.card-title');
+  const dropSub = dropCanvas.closest('.card').querySelector('.card-sub');
+  dropTitle.textContent = 'Funnel Drop-off';
+  if (dropSub) dropSub.textContent = 'Lost between consecutive stages';
+  if (stages.length >= 2) {
+    const dropoff = [];
+    for (let i = 0; i < stages.length - 1; i++) {
+      const lost = Math.max(0, stages[i].total - stages[i + 1].total);
+      dropoff.push({ label: `${stages[i].name} → ${stages[i + 1].name}`, lost });
+    }
+    CHARTS.dropoff = new Chart(dropCanvas, {
+      type: 'bar',
+      data: {
+        labels: dropoff.map(d => d.label.length > 25 ? d.label.slice(0, 25) + '…' : d.label),
+        datasets: [{ data: dropoff.map(d => d.lost), backgroundColor: PALETTE.slice(0, dropoff.length), borderRadius: 4 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+    });
+  }
+
+  /* Kanban — hide (no candidate-level data fetched) */
+  const kEl = document.getElementById('kanbanBoard');
+  if (kEl) kEl.innerHTML = '<div class="empty-section"><div class="empty-text">Live candidate kanban coming in v2</div><div class="empty-hint">Requires candidate-level view, not yet exposed</div></div>';
 }
 
 /* ===== OFFERS ===== */
@@ -2513,68 +2765,87 @@ function renderQuality() {
 
 /* ===== RECRUITER ===== */
 function renderRecruiter() {
-  const activeRecs = RECRUITERS.filter(r => r.active);
-  const recStats = activeRecs.map(r => {
-    const rReqs = REQUISITIONS.filter(x => x.assigned_recruiter_id === r.recruiter_id && (STATE.entity === 'ALL' || x.entity === STATE.entity));
-    const rHires = HIRES.filter(h => {
-      const req = REQUISITIONS.find(x => x.req_id === h.req_id);
-      return req && req.assigned_recruiter_id === r.recruiter_id && entityMatch(req.entity) && h.start_date_actual && inPeriod(h.start_date_actual);
-    });
-    const filled = rReqs.filter(x => x.req_status === 'Filled').length;
-    const totalClosed = rReqs.filter(x => x.req_status !== 'Open').length;
-    const fillRate = totalClosed ? Math.round((filled / totalClosed) * 100) : 0;
-    const avgTTH = calcTTH(rHires);
-    return { ...r, reqs: rReqs.length, hires: rHires.length, fillRate, avgTTH };
-  }).filter(r => r.reqs > 0);
+  const recs = LIVE_DATA.recruiterPerformance || [];
 
-  document.getElementById('recActive').textContent = recStats.length;
-  const totalReqs = recStats.reduce((s, r) => s + r.reqs, 0);
-  document.getElementById('recAvgReqs').textContent = recStats.length ? (totalReqs / recStats.length).toFixed(1) : '—';
-  const fillRates = recStats.map(r => r.fillRate);
-  const avgFR = fillRates.length ? Math.round(fillRates.reduce((a, b) => a + b, 0) / fillRates.length) : 0;
+  /* Filter to recruiters who actually have reqs assigned (not zero) */
+  const activeRecs = recs.filter(r => (r.total_reqs || 0) > 0);
+
+  document.getElementById('recActive').textContent = activeRecs.length;
+  const totalReqs = activeRecs.reduce((s, r) => s + (r.total_reqs || 0), 0);
+  document.getElementById('recAvgReqs').textContent = activeRecs.length ? (totalReqs / activeRecs.length).toFixed(1) : '—';
+
+  /* Avg fill rate — exclude nulls from the avg */
+  const fillRates = activeRecs.map(r => r.fill_rate_pct).filter(v => v !== null && v !== undefined);
+  const avgFR = fillRates.length ? Math.round(fillRates.reduce((a, b) => a + Number(b), 0) / fillRates.length) : 0;
   document.getElementById('recFillRate').textContent = avgFR;
-  const top = [...recStats].sort((a, b) => b.hires - a.hires)[0];
+
+  /* Top performer = highest filled_reqs (most actual hires closed) */
+  const top = [...activeRecs].sort((a, b) => (b.filled_reqs || 0) - (a.filled_reqs || 0))[0];
   document.getElementById('recTop').textContent = top ? top.recruiter_name : '—';
 
+  /* Status badge */
   const stEl = document.getElementById('recStatus');
   const stCode = avgFR >= 75 ? 'green' : avgFR >= 60 ? 'amber' : 'red';
   stEl.className = 'section-status status-' + stCode;
   stEl.innerHTML = '<span class="status-dot"></span><span>Avg fill ' + avgFR + '%</span>';
 
-  /* Ranking chart */
+  /* Ranking chart — top 12 by filled_reqs, stacked filled vs open */
   destroyChart('recRank');
-  const ranked = [...recStats].sort((a, b) => b.hires - a.hires).slice(0, 12);
-  CHARTS.recRank = new Chart(document.getElementById('recRankChart'), {
-    type: 'bar',
-    data: { labels: ranked.map(r => r.recruiter_name.split(' ')[0] + ' ' + (r.recruiter_name.split(' ')[1] || '').charAt(0) + '.'),
-      datasets: [
-        { label: 'Hires Closed', data: ranked.map(r => r.hires), backgroundColor: COL.apex, borderRadius: 4 },
-        { label: 'Open Reqs', data: ranked.map(r => r.reqs - r.hires), backgroundColor: COL.found, borderRadius: 4 }
-      ] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', align: 'end' } },
-      scales: { y: { beginAtZero: true, stacked: true, grid: { color: '#f0f3f7' } }, x: { stacked: true, grid: { display: false } } } }
-  });
+  const ranked = [...activeRecs].sort((a, b) => (b.filled_reqs || 0) - (a.filled_reqs || 0)).slice(0, 12);
+  if (ranked.length > 0) {
+    /* Shorten names: "First L." */
+    const shortName = name => {
+      const parts = (name || '').split(' ');
+      return parts[0] + (parts[1] ? ' ' + parts[1].charAt(0) + '.' : '');
+    };
+    CHARTS.recRank = new Chart(document.getElementById('recRankChart'), {
+      type: 'bar',
+      data: {
+        labels: ranked.map(r => shortName(r.recruiter_name)),
+        datasets: [
+          { label: 'Filled', data: ranked.map(r => r.filled_reqs || 0), backgroundColor: COL.green, borderRadius: 4 },
+          { label: 'Open', data: ranked.map(r => r.open_reqs || 0), backgroundColor: COL.blaze, borderRadius: 4 },
+          { label: 'On Hold', data: ranked.map(r => r.on_hold_reqs || 0), backgroundColor: COL.amber, borderRadius: 4 },
+          { label: 'Cancelled', data: ranked.map(r => r.cancelled_reqs || 0), backgroundColor: COL.muted, borderRadius: 4 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', align: 'end' } },
+        scales: { y: { beginAtZero: true, stacked: true, grid: { color: '#f0f3f7' } }, x: { stacked: true, grid: { display: false } } } }
+    });
+  }
 
-  /* Cards */
+  /* Recruiter cards (operational view) */
   const cardsEl = document.getElementById('recruiterCards');
-  cardsEl.innerHTML = recStats.slice(0, 9).map(r => {
-    const initials = r.recruiter_name.split(' ').map(n => n[0]).join('').slice(0, 2);
-    return `<div class="rec-card">
-      <div class="rec-head">
-        <div class="rec-avatar">${initials}</div>
-        <div><div class="rec-name">${r.recruiter_name}</div><div class="rec-team">${r.team} · ${r.entity_assigned.replace('ISI ', '')}</div></div>
-      </div>
-      <div class="rec-stats">
-        <div class="rec-stat"><div class="rec-stat-val">${r.reqs}</div><div class="rec-stat-lbl">Reqs</div></div>
-        <div class="rec-stat"><div class="rec-stat-val">${r.hires}</div><div class="rec-stat-lbl">Hires</div></div>
-        <div class="rec-stat"><div class="rec-stat-val">${r.fillRate}%</div><div class="rec-stat-lbl">Fill Rate</div></div>
-      </div>
-      <div style="margin-top: 10px;">
-        <div class="text-xs text-muted" style="margin-bottom:4px;">Workload</div>
-        <div class="progress-bar"><div class="progress-fill ${r.reqs > r.monthly_capacity_reqs ? 'red' : r.reqs > r.monthly_capacity_reqs * 0.7 ? 'amber' : 'green'}" style="width:${Math.min(100, (r.reqs / r.monthly_capacity_reqs) * 100)}%"></div></div>
-      </div>
-    </div>`;
-  }).join('');
+  if (activeRecs.length === 0) {
+    cardsEl.innerHTML = '<div class="empty-section"><div class="empty-text">No recruiters found</div></div>';
+  } else {
+    cardsEl.innerHTML = activeRecs.slice(0, 12).map(r => {
+      const initials = (r.recruiter_name || '?').split(' ').map(n => n[0]).join('').slice(0, 2);
+      const filled = r.filled_reqs || 0;
+      const fillRate = r.fill_rate_pct != null ? Math.round(Number(r.fill_rate_pct)) : null;
+      /* Workload as % of total reqs (no monthly capacity in view; use 30 as nominal max) */
+      const NOMINAL_CAPACITY = 30;
+      const total = r.total_reqs || 0;
+      const wlPct = Math.min(100, (total / NOMINAL_CAPACITY) * 100);
+      const wlClass = total > NOMINAL_CAPACITY ? 'red' : total > NOMINAL_CAPACITY * 0.7 ? 'amber' : 'green';
+      return `<div class="rec-card">
+        <div class="rec-head">
+          <div class="rec-avatar">${initials}</div>
+          <div><div class="rec-name">${r.recruiter_name || 'Unknown'}</div><div class="rec-team">${total} reqs assigned</div></div>
+        </div>
+        <div class="rec-stats">
+          <div class="rec-stat"><div class="rec-stat-val">${total}</div><div class="rec-stat-lbl">Total</div></div>
+          <div class="rec-stat"><div class="rec-stat-val">${filled}</div><div class="rec-stat-lbl">Filled</div></div>
+          <div class="rec-stat"><div class="rec-stat-val">${fillRate != null ? fillRate + '%' : '—'}</div><div class="rec-stat-lbl">Fill Rate</div></div>
+        </div>
+        <div style="margin-top: 10px;">
+          <div class="text-xs text-muted" style="margin-bottom:4px;">Workload (vs nominal 30)</div>
+          <div class="progress-bar"><div class="progress-fill ${wlClass}" style="width:${wlPct}%"></div></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 /* ===== COST ===== */
@@ -2679,21 +2950,29 @@ function renderCost() {
 
 /* ===== DIVERSITY ===== */
 function renderDiversity() {
+  /* === LIVE: Gender from v_demographics === */
+  destroyChart('gender');
+  const demo = LIVE_DATA.demographics || [];
+  /* Map gender codes M/F/Other to labels and colors */
+  const genderMap = { 'M': { label: 'Male', color: COL.apex }, 'F': { label: 'Female', color: COL.blaze } };
+  const genderRows = demo.filter(d => d.gender);
+  const labels = genderRows.map(d => (genderMap[d.gender]?.label) || d.gender);
+  const data = genderRows.map(d => d.hires || 0);
+  const colors = genderRows.map(d => genderMap[d.gender]?.color || COL.muted);
+  if (data.reduce((a, b) => a + b, 0) > 0) {
+    CHARTS.gender = new Chart(document.getElementById('genderChart'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  /* === DEMO: Age, Education, Experience — keep mock data, no live source === */
   const cands = filteredCandidates();
   const hires = filteredHires();
   const hireCands = hires.map(h => CANDIDATES.find(x => x.candidate_id === h.candidate_id)).filter(x => x);
 
-  /* Gender */
-  destroyChart('gender');
-  const m = hireCands.filter(c => c.gender === 'M').length;
-  const f = hireCands.filter(c => c.gender === 'F').length;
-  CHARTS.gender = new Chart(document.getElementById('genderChart'), {
-    type: 'doughnut',
-    data: { labels: ['Male', 'Female'], datasets: [{ data: [m, f], backgroundColor: [COL.apex, COL.blaze], borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom' } } }
-  });
-
-  /* Age */
+  /* Age (demo) */
   destroyChart('age');
   const ageBands = ['18-24', '25-34', '35-44', '45+'];
   const ageCounts = ageBands.map(a => hireCands.filter(c => c.age_band === a).length);
@@ -2704,7 +2983,7 @@ function renderDiversity() {
       scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
   });
 
-  /* Education */
+  /* Education (demo) */
   destroyChart('edu');
   const edus = ['Highschool', 'Diploma', 'Bachelor', 'Master+'];
   const eduCounts = edus.map(e => hireCands.filter(c => c.education_level === e).length);
@@ -2715,7 +2994,7 @@ function renderDiversity() {
       scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
   });
 
-  /* Experience */
+  /* Experience (demo) */
   destroyChart('exp');
   const expBands = ['0-2', '2-5', '5-10', '10+'];
   const expCounts = [
@@ -2731,33 +3010,33 @@ function renderDiversity() {
       scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
   });
 
-  /* Gender by entity */
+  /* === Gender by entity — REPLACED with conversion-rate-by-gender from live data === */
   destroyChart('genderByEntity');
-  const ents = STATE.entity === 'ALL' ? ENTITIES : [STATE.entity];
-  const mByEnt = ents.map(e => {
-    const eHires = HIRES.filter(h => h.entity === e && h.start_date_actual && inPeriod(h.start_date_actual));
-    return eHires.filter(h => {
-      const c = CANDIDATES.find(x => x.candidate_id === h.candidate_id);
-      return c && c.gender === 'M';
-    }).length;
-  });
-  const fByEnt = ents.map(e => {
-    const eHires = HIRES.filter(h => h.entity === e && h.start_date_actual && inPeriod(h.start_date_actual));
-    return eHires.filter(h => {
-      const c = CANDIDATES.find(x => x.candidate_id === h.candidate_id);
-      return c && c.gender === 'F';
-    }).length;
-  });
-  CHARTS.genderByEntity = new Chart(document.getElementById('genderByEntityChart'), {
-    type: 'bar',
-    data: { labels: ents.map(e => e.replace('ISI ', '')),
-      datasets: [
-        { label: 'Male', data: mByEnt, backgroundColor: COL.apex, borderRadius: 4 },
-        { label: 'Female', data: fByEnt, backgroundColor: COL.blaze, borderRadius: 4 }
-      ] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', align: 'end' } },
-      scales: { y: { beginAtZero: true, stacked: true, grid: { color: '#f0f3f7' } }, x: { stacked: true, grid: { display: false } } } }
-  });
+  const gbeCanvas = document.getElementById('genderByEntityChart');
+  const gbeTitle = gbeCanvas.closest('.card').querySelector('.card-title');
+  gbeTitle.textContent = 'Candidate-to-Hire Conversion by Gender';
+  if (genderRows.length > 0) {
+    CHARTS.genderByEntity = new Chart(gbeCanvas, {
+      type: 'bar',
+      data: {
+        labels: genderRows.map(d => (genderMap[d.gender]?.label) || d.gender),
+        datasets: [
+          { label: 'Candidates', data: genderRows.map(d => d.candidates || 0), backgroundColor: COL.found, borderRadius: 4 },
+          { label: 'Hires', data: genderRows.map(d => d.hires || 0), backgroundColor: COL.apex, borderRadius: 4 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', align: 'end' },
+          tooltip: { callbacks: { footer: (items) => {
+            const i = items[0]?.dataIndex;
+            const row = genderRows[i];
+            return row?.conversion_rate_pct != null ? 'Conversion: ' + row.conversion_rate_pct + '%' : '';
+          }}}
+        },
+        scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+    });
+  }
 }
 
 /* ===== AI INSIGHTS ===== */
@@ -2839,12 +3118,8 @@ function renderAIInsights() {
 
 /* ===== POPULATE ENTITY DROPDOWN ===== */
 function initFilters() {
-  const sel = document.getElementById('entityFilter');
-  ENTITIES.forEach(e => {
-    const o = document.createElement('option');
-    o.value = e; o.textContent = e;
-    sel.appendChild(o);
-  });
+  /* Entity dropdown removed for v1 — entity data not yet populated.
+     Period dropdown removed for v1 — views are point-in-time snapshots, not parameterized. */
 }
 
 /* ===== RENDER ALL ===== */
@@ -2863,15 +3138,19 @@ function renderAll() {
   renderAIInsights();
 }
 
+/* ===== REFRESH HANDLER ===== */
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  await loadFromSupabase();
+  renderAll();
+  btn.disabled = false;
+  btn.classList.remove('loading');
+}
+
 /* ===== EVENT BINDINGS ===== */
-document.getElementById('entityFilter').addEventListener('change', e => {
-  STATE.entity = e.target.value;
-  renderAll();
-});
-document.getElementById('periodFilter').addEventListener('change', e => {
-  STATE.period = e.target.value;
-  renderAll();
-});
+document.getElementById('refreshBtn').addEventListener('click', refreshAll);
 document.querySelectorAll('.vt-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.vt-btn').forEach(b => b.classList.remove('active'));
@@ -2938,9 +3217,17 @@ window.addEventListener('resize', () => { syncTopbarHeight(); scrollSidebarToAct
 window.addEventListener('load', syncTopbarHeight);
 syncTopbarHeight();
 
-/* ===== INIT ===== */
+/* ===== INIT — async: render mock first for instant paint, then load & re-render with live ===== */
 initFilters();
+
+/* First paint: render the demo sections immediately so user sees structure */
 renderAll();
+
+/* Then asynchronously fetch live data and re-render */
+(async () => {
+  await loadFromSupabase();
+  renderAll();
+})();
 </script>
 </body>
 </html>
