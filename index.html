@@ -1247,10 +1247,10 @@ body {
     <section class="section" id="sourcing">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 02 · Top of Funnel <span class="data-badge demo"><span class="dot"></span>Demo data</span></div>
+          <div class="section-eyebrow">Section 02 · Top of Funnel <span class="data-badge live"><span class="dot"></span>Live</span></div>
           <div class="section-title">Sourcing &amp; Channels</div>
           <div class="section-sub">Source mix · channel ROI · cost-per-hire by channel
-            <span class="data-note">⚠ Live view (v_source_performance) has data quality issue (impossible 100% hire rate). Showing demo data until view is fixed.</span>
+            <span class="data-note">Hire-rate column is suppressed for sources where only successful hires were migrated. Channel cost data not yet captured (Gap 2).</span>
           </div>
         </div>
         <div class="section-status" id="srcStatus"><span class="status-dot"></span><span>—</span></div>
@@ -1573,7 +1573,9 @@ const LIVE_DATA = {
   requisitionSummary: null,
   ageDistribution: null,
   educationDistribution: null,
-  experienceDistribution: null
+  experienceDistribution: null,
+  sourcePerformance: null,
+  sourcePerformanceExcluded: null
 };
 
 /* ===== SUPABASE FETCHER ===== */
@@ -1608,11 +1610,12 @@ async function loadFromSupabase() {
   banner.textContent = '⏳ Loading live data from Supabase…';
 
   try {
-    /* Parallel fetch of all views (8 + 3 new demographic views) */
+    /* Parallel fetch of all views (10 + 3 demographic + 2 sourcing) */
     const [
       kpiSummary, agingBuckets, monthlyTrends, funnel,
       recruiterPerformance, demographics, workforceDistribution, requisitionSummary,
-      ageDistribution, educationDistribution, experienceDistribution
+      ageDistribution, educationDistribution, experienceDistribution,
+      sourcePerformance, sourcePerformanceExcluded
     ] = await Promise.all([
       fetchView('v_kpi_summary'),
       fetchView('v_aging_buckets'),
@@ -1624,7 +1627,9 @@ async function loadFromSupabase() {
       fetchView('v_requisition_summary', 'status=eq.open&order=created_at.asc&limit=20'),
       fetchView('v_age_distribution'),
       fetchView('v_education_distribution'),
-      fetchView('v_experience_distribution')
+      fetchView('v_experience_distribution'),
+      fetchView('v_source_performance'),
+      fetchView('v_source_performance_excluded')
     ]);
 
     /* Store - aggregate views return arrays, take first row for single-row ones */
@@ -1639,6 +1644,8 @@ async function loadFromSupabase() {
     LIVE_DATA.ageDistribution = ageDistribution;
     LIVE_DATA.educationDistribution = educationDistribution;
     LIVE_DATA.experienceDistribution = experienceDistribution;
+    LIVE_DATA.sourcePerformance = sourcePerformance;
+    LIVE_DATA.sourcePerformanceExcluded = Array.isArray(sourcePerformanceExcluded) ? sourcePerformanceExcluded[0] : sourcePerformanceExcluded;
 
     banner.className = 'connection-banner success show';
     banner.innerHTML = `✓ Live data loaded · ${LIVE_DATA.kpiSummary?.total_reqs || 0} requisitions · ${LIVE_DATA.kpiSummary?.total_candidates || 0} candidates · ${LIVE_DATA.kpiSummary?.total_hires || 0} hires`;
@@ -2380,85 +2387,141 @@ function prioChip(p) {
 
 /* ===== SOURCING ===== */
 function renderSourcing() {
-  const cands = filteredCandidates();
-  const hires = filteredHires();
-  const periodMonths = STATE.period === 'ytd' ? 4 : Math.ceil(parseInt(STATE.period) / 30);
+  const rows = LIVE_DATA.sourcePerformance || [];
+  const excluded = LIVE_DATA.sourcePerformanceExcluded || {};
 
-  document.getElementById('srcApps').textContent = fmt(cands.length);
-  const usedSources = new Set(cands.map(c => c.source_id));
-  document.getElementById('srcChannels').textContent = usedSources.size;
+  /* Pretty-label map for the snake_case source values from the DB */
+  const labelMap = {
+    'referral':    'Referral',
+    'linkedin':    'LinkedIn',
+    'job_board':   'Job Board',
+    'agency':      'Agency',
+    'direct':      'Direct',
+    'career_site': 'Career Site',
+    'other':       'Other',
+    'unknown':     'Unknown'
+  };
+  const pretty = code => labelMap[code] || code;
 
-  /* Channel performance */
-  const channelData = SOURCES.map(s => {
-    const apps = cands.filter(c => c.source_id === s.id).length;
-    const sHires = hires.filter(h => {
-      const c = CANDIDATES.find(x => x.candidate_id === h.candidate_id);
-      return c && c.source_id === s.id;
-    }).length;
-    const spend = s.monthlyCost * periodMonths + (s.type === 'Agency' ? sHires * 600 : 0);
-    const cph = sHires ? Math.round(spend / sHires) : null;
-    const conv = apps ? Math.round((sHires / apps) * 1000) / 10 : 0;
-    return { ...s, apps, hires: sHires, spend, cph, conv };
-  });
-  const totalSpend = channelData.reduce((s, c) => s + c.spend, 0);
-  document.getElementById('srcSpend').textContent = '$' + fmt(totalSpend);
+  /* Filter out the "unknown" bucket from main visuals (usually a single
+     placeholder candidate or unmapped legacy value); keep it in totals */
+  const knownRows = rows.filter(r => r.source && r.source !== 'unknown');
+  const unknownTotal = (rows.find(r => r.source === 'unknown')?.total_candidates) || 0;
 
-  /* Best ROI: lowest CPH with at least 3 hires */
-  const roiRanked = channelData.filter(c => c.hires >= 3).sort((a, b) => (a.cph || 99999) - (b.cph || 99999));
-  if (roiRanked[0]) {
-    document.getElementById('srcBest').textContent = roiRanked[0].name;
-    document.getElementById('srcBestSub').textContent = '$' + fmt(roiRanked[0].cph) + ' / hire · ' + roiRanked[0].hires + ' hires';
-  }
+  const totalApps    = rows.reduce((s, r) => s + (r.total_applications || 0), 0);
+  const totalHires   = rows.reduce((s, r) => s + (r.total_hires || 0), 0);
+  const totalCands   = rows.reduce((s, r) => s + (r.total_candidates || 0), 0);
+  const usedChannels = knownRows.length;
 
+  document.getElementById('srcApps').textContent = fmt(totalCands);
+  document.getElementById('srcChannels').textContent = usedChannels;
+
+  /* Cost data not tracked yet — show a friendly placeholder */
+  document.getElementById('srcSpend').textContent = '—';
+  document.getElementById('srcBest').textContent = '—';
+  document.getElementById('srcBestSub').textContent = 'Cost tracking not yet enabled (Gap 2)';
+
+  /* Status badge — based on referral share of hires (industry benchmark: ~25%+ is healthy) */
+  const refRow = rows.find(r => r.source === 'referral');
+  const refShare = refRow && totalHires ? Math.round((refRow.total_hires / totalHires) * 100) : 0;
   const stEl = document.getElementById('srcStatus');
-  const refShare = pct(channelData.find(c => c.id === 'SRC-REF').hires, hires.length);
   const stCode = refShare > 25 ? 'green' : refShare > 15 ? 'amber' : 'red';
   stEl.className = 'section-status status-' + stCode;
   stEl.innerHTML = '<span class="status-dot"></span><span>Referral share ' + refShare + '%</span>';
 
-  /* Source mix */
+  /* === SOURCE MIX (doughnut) — by hires, the most credible signal === */
   destroyChart('sourceMix');
-  const mixData = channelData.filter(c => c.hires > 0).sort((a, b) => b.hires - a.hires);
-  CHARTS.sourceMix = new Chart(document.getElementById('sourceMixChart'), {
-    type: 'doughnut',
-    data: { labels: mixData.map(d => d.name),
-      datasets: [{ data: mixData.map(d => d.hires), backgroundColor: PALETTE, borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false } } }
-  });
-  document.getElementById('sourceMixLegend').innerHTML = mixData.map((d, i) =>
-    `<div class="donut-legend-item"><div class="donut-legend-dot" style="background:${PALETTE[i]}"></div>${d.name}<span class="donut-legend-num">${d.hires}</span></div>`
-  ).join('');
+  const mixRows = knownRows.filter(r => (r.total_hires || 0) > 0)
+                            .sort((a, b) => (b.total_hires || 0) - (a.total_hires || 0));
+  if (mixRows.length > 0) {
+    CHARTS.sourceMix = new Chart(document.getElementById('sourceMixChart'), {
+      type: 'doughnut',
+      data: {
+        labels: mixRows.map(r => pretty(r.source)),
+        datasets: [{ data: mixRows.map(r => r.total_hires || 0), backgroundColor: PALETTE, borderWidth: 0 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false } } }
+    });
+    document.getElementById('sourceMixLegend').innerHTML = mixRows.map((r, i) =>
+      `<div class="donut-legend-item"><div class="donut-legend-dot" style="background:${PALETTE[i % PALETTE.length]}"></div>${pretty(r.source)}<span class="donut-legend-num">${r.total_hires}</span></div>`
+    ).join('');
+  } else {
+    document.getElementById('sourceMixLegend').innerHTML = '<div class="empty-section" style="padding:10px;"><div class="empty-text">No source-attributed hires</div></div>';
+  }
 
-  /* CPH by channel */
+  /* === CPH chart (cost not tracked) — REPLACED with hires per source === */
   destroyChart('cphChannel');
-  const cphData = channelData.filter(c => c.cph !== null).sort((a, b) => a.cph - b.cph);
-  CHARTS.cphChannel = new Chart(document.getElementById('cphChannelChart'), {
-    type: 'bar',
-    data: { labels: cphData.map(d => d.name),
-      datasets: [{ data: cphData.map(d => d.cph), backgroundColor: cphData.map((_, i) => PALETTE[i % PALETTE.length]), borderRadius: 4 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true, grid: { color: '#f0f3f7' }, ticks: { callback: v => '$' + fmt(v) } }, y: { grid: { display: false } } } }
-  });
+  const cphCanvas = document.getElementById('cphChannelChart');
+  const cphTitle  = cphCanvas.closest('.card').querySelector('.card-title');
+  cphTitle.textContent = 'Hires by Channel';
+  const cphSub    = cphCanvas.closest('.card').querySelector('.card-sub');
+  if (cphSub) cphSub.textContent = 'Cost-per-hire pending (Gap 2)';
+  const hiresRows = [...knownRows].sort((a, b) => (b.total_hires || 0) - (a.total_hires || 0));
+  if (hiresRows.length > 0) {
+    CHARTS.cphChannel = new Chart(cphCanvas, {
+      type: 'bar',
+      data: {
+        labels: hiresRows.map(r => pretty(r.source)),
+        datasets: [{
+          data: hiresRows.map(r => r.total_hires || 0),
+          backgroundColor: hiresRows.map((_, i) => PALETTE[i % PALETTE.length]),
+          borderRadius: 4
+        }]
+      },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, grid: { color: '#f0f3f7' } }, y: { grid: { display: false } } } }
+    });
+  }
 
-  /* Channel table */
+  /* === CHANNEL TABLE === */
+  /* Honest hire-rate display: if applications == hires (suspicious migration pattern),
+     show "—" with a tooltip; if there's a real spread, show the real percentage. */
   const ct = document.querySelector('#channelTable tbody');
-  ct.innerHTML = channelData.sort((a, b) => b.hires - a.hires).map(d => {
-    let status = 'chip-gray', label = '—';
-    if (d.hires >= 5 && d.cph && d.cph < 1500) { status = 'chip-green'; label = 'High ROI'; }
-    else if (d.hires >= 3) { status = 'chip-blue'; label = 'Active'; }
-    else if (d.hires === 0) { status = 'chip-red'; label = 'No hires'; }
-    else { status = 'chip-amber'; label = 'Low volume'; }
-    return `<tr>
-      <td><strong>${d.name}</strong></td>
-      <td><span class="chip chip-gray">${d.type}</span></td>
-      <td class="tbl-num">${fmt(d.apps)}</td>
-      <td class="tbl-num">${d.hires}</td>
-      <td class="tbl-num">${d.conv}%</td>
-      <td class="tbl-num">$${fmt(d.spend)}</td>
-      <td class="tbl-num">${d.cph !== null ? '$' + fmt(d.cph) : '—'}</td>
-      <td><span class="chip ${status}">${label}</span></td>
-    </tr>`;
-  }).join('');
+  const tableRows = [...knownRows].sort((a, b) => (b.total_hires || 0) - (a.total_hires || 0));
+  if (tableRows.length > 0) {
+    ct.innerHTML = tableRows.map(r => {
+      const isMigrationLike = r.total_applications > 0 && r.total_applications === r.total_hires;
+      const convDisplay = isMigrationLike
+        ? '<span class="text-muted" title="All applications for this source are hires — likely migration artifact">—</span>'
+        : (r.hire_rate_pct != null ? Number(r.hire_rate_pct).toFixed(1) + '%' : '—');
+      let status = 'chip-gray', label = '—';
+      if ((r.total_hires || 0) >= 50) { status = 'chip-green'; label = 'Top channel'; }
+      else if ((r.total_hires || 0) >= 10) { status = 'chip-blue'; label = 'Active'; }
+      else if ((r.total_hires || 0) === 0) { status = 'chip-red'; label = 'No hires'; }
+      else { status = 'chip-amber'; label = 'Low volume'; }
+      return `<tr>
+        <td><strong>${pretty(r.source)}</strong></td>
+        <td><span class="chip chip-gray">Channel</span></td>
+        <td class="tbl-num">${fmt(r.total_applications || 0)}</td>
+        <td class="tbl-num">${fmt(r.total_hires || 0)}</td>
+        <td class="tbl-num">${convDisplay}</td>
+        <td class="tbl-num">—</td>
+        <td class="tbl-num">—</td>
+        <td><span class="chip ${status}">${label}</span></td>
+      </tr>`;
+    }).join('');
+  } else {
+    ct.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--muted); padding: 20px;">No source data available</td></tr>';
+  }
+
+  /* === FOOTER NOTE about excluded migration hires === */
+  const excludedCount = excluded.excluded_hire_count || 0;
+  let footerEl = document.querySelector('#sourcing-section .sourcing-footer');
+  if (!footerEl) {
+    footerEl = document.createElement('div');
+    footerEl.className = 'sourcing-footer';
+    footerEl.style.cssText = 'margin-top: 12px; font-size: 11px; color: var(--muted); font-style: italic; padding: 8px 12px; background: #fafbfd; border-radius: 6px;';
+    const sec = document.getElementById('sourcing-section');
+    if (sec) sec.appendChild(footerEl);
+  }
+  if (footerEl) {
+    if (excludedCount > 0) {
+      footerEl.innerHTML = `+ ${excludedCount} historical hires from pre-platform migration not attributed to a specific source. Total platform hire count remains ${fmt(totalHires + excludedCount)}.`;
+      footerEl.style.display = 'block';
+    } else {
+      footerEl.style.display = 'none';
+    }
+  }
 }
 
 /* ===== FUNNEL ===== */
