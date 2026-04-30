@@ -1491,10 +1491,10 @@ body {
     <section class="section" id="diversity">
       <div class="section-header">
         <div class="section-title-block">
-          <div class="section-eyebrow">Section 09 · Demographics <span class="data-badge partial"><span class="dot"></span>Partial · Gender live</span></div>
+          <div class="section-eyebrow">Section 09 · Demographics <span class="data-badge live"><span class="dot"></span>Live</span></div>
           <div class="section-title">Diversity &amp; Demographics</div>
           <div class="section-sub">Gender · age · education · experience
-            <span class="data-note">Gender is live from v_demographics. Age, education, and experience charts are demo data.</span>
+            <span class="data-note">All charts are now live from Supabase. As your team fills demographic fields on new candidates, the "Unknown" categories will shrink.</span>
           </div>
         </div>
         <div class="section-status status-green"><span class="status-dot"></span><span>Tracking</span></div>
@@ -1570,7 +1570,10 @@ const LIVE_DATA = {
   recruiterPerformance: null,
   demographics: null,
   workforceDistribution: null,
-  requisitionSummary: null
+  requisitionSummary: null,
+  ageDistribution: null,
+  educationDistribution: null,
+  experienceDistribution: null
 };
 
 /* ===== SUPABASE FETCHER ===== */
@@ -1605,10 +1608,11 @@ async function loadFromSupabase() {
   banner.textContent = '⏳ Loading live data from Supabase…';
 
   try {
-    /* Parallel fetch of all 8 views */
+    /* Parallel fetch of all views (8 + 3 new demographic views) */
     const [
       kpiSummary, agingBuckets, monthlyTrends, funnel,
-      recruiterPerformance, demographics, workforceDistribution, requisitionSummary
+      recruiterPerformance, demographics, workforceDistribution, requisitionSummary,
+      ageDistribution, educationDistribution, experienceDistribution
     ] = await Promise.all([
       fetchView('v_kpi_summary'),
       fetchView('v_aging_buckets'),
@@ -1617,7 +1621,10 @@ async function loadFromSupabase() {
       fetchView('v_recruiter_performance', 'order=fill_rate_pct.desc.nullslast'),
       fetchView('v_demographics'),
       fetchView('v_workforce_distribution'),
-      fetchView('v_requisition_summary', 'status=eq.open&order=created_at.asc&limit=20')
+      fetchView('v_requisition_summary', 'status=eq.open&order=created_at.asc&limit=20'),
+      fetchView('v_age_distribution'),
+      fetchView('v_education_distribution'),
+      fetchView('v_experience_distribution')
     ]);
 
     /* Store - aggregate views return arrays, take first row for single-row ones */
@@ -1629,6 +1636,9 @@ async function loadFromSupabase() {
     LIVE_DATA.demographics = demographics;
     LIVE_DATA.workforceDistribution = workforceDistribution;
     LIVE_DATA.requisitionSummary = requisitionSummary;
+    LIVE_DATA.ageDistribution = ageDistribution;
+    LIVE_DATA.educationDistribution = educationDistribution;
+    LIVE_DATA.experienceDistribution = experienceDistribution;
 
     banner.className = 'connection-banner success show';
     banner.innerHTML = `✓ Live data loaded · ${LIVE_DATA.kpiSummary?.total_reqs || 0} requisitions · ${LIVE_DATA.kpiSummary?.total_candidates || 0} candidates · ${LIVE_DATA.kpiSummary?.total_hires || 0} hires`;
@@ -2948,94 +2958,187 @@ function renderCost() {
   });
 }
 
-/* ===== DIVERSITY ===== */
+/* ===== DIVERSITY (fully live from Supabase views) ===== */
 function renderDiversity() {
-  /* === LIVE: Gender from v_demographics === */
+  /* Helper: filter out "Unknown" rows but keep them as a separate count for footer notes */
+  const splitKnownUnknown = (rows, keyField) => {
+    const known   = (rows || []).filter(r => r[keyField] && r[keyField] !== 'Unknown');
+    const unknown = (rows || []).filter(r => !r[keyField] || r[keyField] === 'Unknown');
+    const unknownCount = unknown.reduce((s, r) => s + (r.candidates || 0), 0);
+    return { known, unknownCount };
+  };
+
+  /* === GENDER (from v_demographics) === */
   destroyChart('gender');
   const demo = LIVE_DATA.demographics || [];
-  /* Map gender codes M/F/Other to labels and colors */
-  const genderMap = { 'M': { label: 'Male', color: COL.apex }, 'F': { label: 'Female', color: COL.blaze } };
-  const genderRows = demo.filter(d => d.gender);
-  const labels = genderRows.map(d => (genderMap[d.gender]?.label) || d.gender);
-  const data = genderRows.map(d => d.hires || 0);
-  const colors = genderRows.map(d => genderMap[d.gender]?.color || COL.muted);
-  if (data.reduce((a, b) => a + b, 0) > 0) {
+  const genderMap = {
+    'M':    { label: 'Male',                   color: COL.apex   },
+    'F':    { label: 'Female',                 color: COL.blaze  },
+    'Other':{ label: 'Other',                  color: COL.amber  },
+    'PNTS': { label: 'Prefer not to say',      color: COL.muted  }
+  };
+  const genderKnown = demo.filter(d => d.gender && d.gender !== 'Unknown');
+  const genderHires = genderKnown.map(d => d.hires || 0);
+  if (genderHires.reduce((a, b) => a + b, 0) > 0) {
     CHARTS.gender = new Chart(document.getElementById('genderChart'), {
       type: 'doughnut',
-      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+      data: {
+        labels: genderKnown.map(d => (genderMap[d.gender]?.label) || d.gender),
+        datasets: [{
+          data: genderHires,
+          backgroundColor: genderKnown.map(d => genderMap[d.gender]?.color || COL.muted),
+          borderWidth: 0
+        }]
+      },
       options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom' } } }
     });
   }
 
-  /* === DEMO: Age, Education, Experience — keep mock data, no live source === */
-  const cands = filteredCandidates();
-  const hires = filteredHires();
-  const hireCands = hires.map(h => CANDIDATES.find(x => x.candidate_id === h.candidate_id)).filter(x => x);
-
-  /* Age (demo) */
+  /* === AGE (from v_age_distribution) === */
   destroyChart('age');
-  const ageBands = ['18-24', '25-34', '35-44', '45+'];
-  const ageCounts = ageBands.map(a => hireCands.filter(c => c.age_band === a).length);
+  const ageRows = LIVE_DATA.ageDistribution || [];
+  const { known: ageKnown, unknownCount: ageUnk } = splitKnownUnknown(ageRows, 'age_band');
   CHARTS.age = new Chart(document.getElementById('ageChart'), {
     type: 'bar',
-    data: { labels: ageBands, datasets: [{ data: ageCounts, backgroundColor: COL.apex, borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+    data: {
+      labels: ageKnown.map(r => r.age_band),
+      datasets: [{
+        label: 'Candidates',
+        data: ageKnown.map(r => r.candidates || 0),
+        backgroundColor: COL.apex,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { footer: (items) => {
+          const r = ageKnown[items[0]?.dataIndex];
+          return r ? `Hires: ${r.hires || 0}  ·  Conversion: ${r.conversion_rate_pct ?? '—'}%` : '';
+        }}}
+      },
+      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } }
+    }
   });
+  /* If most data is "Unknown", show a small subtitle hint on the card */
+  setUnknownHint('ageChart', ageUnk, ageKnown.reduce((s, r) => s + (r.candidates || 0), 0));
 
-  /* Education (demo) */
+  /* === EDUCATION (from v_education_distribution) === */
   destroyChart('edu');
-  const edus = ['Highschool', 'Diploma', 'Bachelor', 'Master+'];
-  const eduCounts = edus.map(e => hireCands.filter(c => c.education_level === e).length);
+  const eduRows = LIVE_DATA.educationDistribution || [];
+  const eduLabelMap = {
+    'high_school': 'High School',
+    'diploma':     'Diploma',
+    'bachelor':    'Bachelor',
+    'master':      'Master',
+    'phd':         'PhD'
+  };
+  const { known: eduKnown, unknownCount: eduUnk } = splitKnownUnknown(eduRows, 'education_level');
   CHARTS.edu = new Chart(document.getElementById('eduChart'), {
     type: 'bar',
-    data: { labels: edus, datasets: [{ data: eduCounts, backgroundColor: COL.green, borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+    data: {
+      labels: eduKnown.map(r => eduLabelMap[r.education_level] || r.education_level),
+      datasets: [{
+        label: 'Candidates',
+        data: eduKnown.map(r => r.candidates || 0),
+        backgroundColor: COL.green,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { footer: (items) => {
+          const r = eduKnown[items[0]?.dataIndex];
+          return r ? `Hires: ${r.hires || 0}  ·  Conversion: ${r.conversion_rate_pct ?? '—'}%` : '';
+        }}}
+      },
+      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } }
+    }
   });
+  setUnknownHint('eduChart', eduUnk, eduKnown.reduce((s, r) => s + (r.candidates || 0), 0));
 
-  /* Experience (demo) */
+  /* === EXPERIENCE (from v_experience_distribution) === */
   destroyChart('exp');
-  const expBands = ['0-2', '2-5', '5-10', '10+'];
-  const expCounts = [
-    hireCands.filter(c => c.years_experience < 2).length,
-    hireCands.filter(c => c.years_experience >= 2 && c.years_experience < 5).length,
-    hireCands.filter(c => c.years_experience >= 5 && c.years_experience < 10).length,
-    hireCands.filter(c => c.years_experience >= 10).length
-  ];
+  const expRows = LIVE_DATA.experienceDistribution || [];
+  const { known: expKnown, unknownCount: expUnk } = splitKnownUnknown(expRows, 'experience_band');
   CHARTS.exp = new Chart(document.getElementById('expChart'), {
     type: 'bar',
-    data: { labels: expBands, datasets: [{ data: expCounts, backgroundColor: COL.amber, borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+    data: {
+      labels: expKnown.map(r => r.experience_band),
+      datasets: [{
+        label: 'Candidates',
+        data: expKnown.map(r => r.candidates || 0),
+        backgroundColor: COL.amber,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { footer: (items) => {
+          const r = expKnown[items[0]?.dataIndex];
+          return r ? `Hires: ${r.hires || 0}  ·  Conversion: ${r.conversion_rate_pct ?? '—'}%` : '';
+        }}}
+      },
+      scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } }
+    }
   });
+  setUnknownHint('expChart', expUnk, expKnown.reduce((s, r) => s + (r.candidates || 0), 0));
 
-  /* === Gender by entity — REPLACED with conversion-rate-by-gender from live data === */
+  /* === Candidate-to-Hire Conversion by Gender (live) === */
   destroyChart('genderByEntity');
   const gbeCanvas = document.getElementById('genderByEntityChart');
-  const gbeTitle = gbeCanvas.closest('.card').querySelector('.card-title');
+  const gbeTitle  = gbeCanvas.closest('.card').querySelector('.card-title');
   gbeTitle.textContent = 'Candidate-to-Hire Conversion by Gender';
-  if (genderRows.length > 0) {
+  if (genderKnown.length > 0) {
     CHARTS.genderByEntity = new Chart(gbeCanvas, {
       type: 'bar',
       data: {
-        labels: genderRows.map(d => (genderMap[d.gender]?.label) || d.gender),
+        labels: genderKnown.map(d => (genderMap[d.gender]?.label) || d.gender),
         datasets: [
-          { label: 'Candidates', data: genderRows.map(d => d.candidates || 0), backgroundColor: COL.found, borderRadius: 4 },
-          { label: 'Hires', data: genderRows.map(d => d.hires || 0), backgroundColor: COL.apex, borderRadius: 4 }
+          { label: 'Candidates', data: genderKnown.map(d => d.candidates || 0), backgroundColor: COL.found, borderRadius: 4 },
+          { label: 'Hires',      data: genderKnown.map(d => d.hires      || 0), backgroundColor: COL.apex,  borderRadius: 4 }
         ]
       },
-      options: { responsive: true, maintainAspectRatio: false,
+      options: {
+        responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { position: 'top', align: 'end' },
           tooltip: { callbacks: { footer: (items) => {
-            const i = items[0]?.dataIndex;
-            const row = genderRows[i];
-            return row?.conversion_rate_pct != null ? 'Conversion: ' + row.conversion_rate_pct + '%' : '';
+            const r = genderKnown[items[0]?.dataIndex];
+            return r?.conversion_rate_pct != null ? 'Conversion: ' + r.conversion_rate_pct + '%' : '';
           }}}
         },
-        scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } } }
+        scales: { y: { beginAtZero: true, grid: { color: '#f0f3f7' } }, x: { grid: { display: false } } }
+      }
     });
+  }
+}
+
+/* Helper: append a small subtitle to a chart card showing how many candidates
+   fall in the "Unknown" bucket. This is a soft signal to recruiters that
+   demographic data isn't being filled in for some intakes. */
+function setUnknownHint(canvasId, unknownCount, knownCount) {
+  const card = document.getElementById(canvasId)?.closest('.card');
+  if (!card) return;
+  let hint = card.querySelector('.unknown-hint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.className = 'unknown-hint';
+    hint.style.cssText = 'font-size: 10px; color: var(--muted); margin-top: 4px; font-style: italic;';
+    card.appendChild(hint);
+  }
+  if (unknownCount > 0) {
+    const total = unknownCount + knownCount;
+    const pct = total > 0 ? Math.round((unknownCount / total) * 100) : 0;
+    hint.textContent = `+ ${unknownCount} candidates (${pct}%) with this field unfilled — not shown`;
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
   }
 }
 
